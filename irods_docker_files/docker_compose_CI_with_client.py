@@ -51,15 +51,20 @@ def main() :
 
     import importlib
     sys.path.insert(0, Args.local_repository)
-    test_hook = importlib.import_module('test_hook')
-    
-    # The following runs the test_hook module imported from client repo. That module's
-    # run() function calls back to the injected object (of class 'CI_client_interface'
-    # - defined below):
-    #
+    test_hook_module = importlib.import_module('irods_consortium_continuous_integration_test_module')
 
-    exit(test_hook.run(
-        CI_client_interface (modifiers_for_config, Args.local_repository)
+    # The following runs the test_hook module imported from client repo. That module's
+    # run() function calls back via an injected object of class 'CI_client_interface'.
+
+    compose_proj_dir = Args.local_repository
+
+    initialize = getattr(test_hook_module,'init',None)
+    if callable(initialize):
+        dir_ = initialize()
+        if dir: compose_proj_dir = dir_
+
+    exit(test_hook_module.run(
+        CI_client_interface (modifiers_for_config, compose_proj_dir)
     ))
 
 
@@ -79,14 +84,27 @@ class CI_client_interface (object):
         filelist = [ sys.stdout ]
         for s in streams: filelist.append(s)
         locks = { f: threading.Lock() for f in filelist }
+        MAX_LINE_ELEMENTS = 256
+        multi_CR = re.compile(b'(\n+)')
 
-        def readgen(gen,ident):
-            for line in gen:
-                log_line = "(" + ident +") -- | " + line.decode("utf8")
-                # -- output with per-stream mutex locked
-                for f in filelist:
-                    with locks[f]:
-                        f.write(log_line)
+        def CR_repartition(line_buf, new_chars=b''):
+            line_buf.append(new_chars)
+            log_line = b''
+            if b'\n' in new_chars or len(line_buf) > MAX_LINE_ELEMENTS:
+                line_buf = multi_CR.split(b''.join(line_buf))
+                log_line += b''.join(line_buf[:2])
+                del line_buf[:2]
+            return log_line, list(filter(None,line_buf))
+
+        def readgen(gen, ident):
+            buf = []
+            for chars in gen:
+                log_line, buf = CR_repartition (buf, chars)
+                if log_line:
+                    for f in filelist:
+                        with locks[f]:
+                            f.write("(" + ident + ") -- | " + log_line.decode("utf8"))
+
 
         for ctnr in containers:
             t = threading.Thread(target=readgen, args=(ctnr.log_stream, ctnr.name))
@@ -165,7 +183,7 @@ class CI_client_interface (object):
                     print("\n-- WARNING -- not modifying configuration value at level {!r} in key hierarchy"
                           "\ndue to mismatch of value type in basic and modifier configs"
                           "" .format(key_hierarchy(k)), file = sys.stderr)
-                    
+
         if allow_override:
             update_lhs_scalars_with_rhs( self.config, self.modifier_config )
         return self.config.copy()
