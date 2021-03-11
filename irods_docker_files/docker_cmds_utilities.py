@@ -181,6 +181,12 @@ def execute_shell_command(_cmd, _log):
 
     return p.returncode
 
+def random_log_path(v=None):
+    name = tempfile.NamedTemporaryFile(delete=False).name
+    if isinstance(v,list):
+        v.append(name)
+    return name
+
 def run_command_in_container(run_cmd, exec_cmd, stop_cmd, irods_container, alias_name, database_container, database_type, network_name, **kwargs):
     with open(kwargs['log_path'], 'w') as job_log:
         # Launch container for test.
