@@ -12,6 +12,9 @@ import json
 from pprint import pformat
 from os.path import join
 import compose.cli.command
+import docker
+import base64
+import uuid
 
 def main() :
 
@@ -112,8 +115,19 @@ class CI_client_interface (object):
             t.start()
 
 
+    def run_package_builders( self ,
+                     project , 
+                     builder_service_names_ ,
+                   ):
+        available_services = [ _.name : _ for _ in project.services ]
+        project.services
+        print( '-- BUILD PHASE --' )
+        for svc in builder_service_names_:
+
     def run_and_wait_on_client_exit( self,
-                                     name_pattern = '[-_]client-runner[-_]',
+                                     runner_name_pattern = '[-_]client-runner[-_]',  ## probably should use name_without_project
+                                     builder_service_names = ('package-builder',),   # use ()
+                                     config_key_to_package_src_host_path = 'packages_source',
                                      rgx_flags    = re.IGNORECASE,
                                      import_vars  = True ):
 
@@ -127,16 +141,23 @@ class CI_client_interface (object):
                    file = sys.stderr)
 
         proj = self.compose_prj
-        if  proj is None:
-            proj = compose.cli.command.get_project( self.compose_path )
 
-        proj.build()            # build and run from docker-compose.yml
+        My_Project_Name = os.path.basename(self.compose_path.strip('/')) + "_" + base64.urlsafe_b64encode(uuid.uuid1().get_bytes())
+
+        if  proj is None:
+            proj = compose.cli.command.get_project( self.compose_path, # project_name =  My_Project_Name
+                   )
+
+        proj.build()            # build from the current docker-compose.yml in case of changes
+
+        if config_key_to_package_src_host_path and self.config[config_key_to_package_src_host_path]
+
+        cli_rgx = re.compile(runner_name_pattern, rgx_flags)
         containers = self.compose_prj = proj.up()
 
         # -- Match client container by name for status reporting
         #
-        rgx = re.compile(name_pattern, rgx_flags)
-        status_containers = [ c for c in containers if rgx.search(c.name) ]
+        status_containers = [ c for c in containers if cli_rgx.search(c.name) ]
 
         if len(status_containers) != 1:
             raise RuntimeError("Exactly one container can be waited on for CI status, but the"
