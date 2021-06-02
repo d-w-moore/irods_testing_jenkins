@@ -259,7 +259,18 @@ class CI_client_interface (object):
                                "names of {} containers were matched".format(len(status_containers)))
 
         os.environ['TERM'] = 'unknown'
-        self._spawn_container_log_spoolers(containers)
+
+        def matches_one_of (x,regex_list):
+            if regex_list is None:
+                return [re.escape(x)]
+            else:
+                return list(filter(lambda y:re.match(y,x), regex_list))
+
+        regexes_for_log_spooling = Jenkins.get ('regexes_for_log_spooling', None) # Specify [] for this setting to
+                                                                                  # exclude all containers from log
+        log_containers = [ c for c in containers if matches_one_of(c.name_without_project,regexes_for_log_spooling) ]
+        self._spawn_container_log_spoolers(log_containers)
+
         status_code = status_containers[0].wait()
 
         proj_down_setting = Jenkins.get("project_down_when_client_exits", None)
